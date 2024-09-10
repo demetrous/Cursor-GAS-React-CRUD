@@ -1,0 +1,16 @@
+key,label,type,required,options,sortable,align,min,max,Show,FormReadOnly
+Core Area,Core Area,text,TRUE,,TRUE,start,,,TRUE,TRUE
+Strategic Objective #,Strategic Objective #,text,TRUE,,TRUE,start,,,TRUE,TRUE
+Strategic Objective,Strategic Objective,text,TRUE,,TRUE,start,,,TRUE,TRUE
+Metric,Metric,text,TRUE,,TRUE,start,,,TRUE,TRUE
+Goal,Goal,number,TRUE,,TRUE,start,,,TRUE,TRUE
+Actual,Actual,number,TRUE,,TRUE,start,,,TRUE,FALSE
+Year,Year,text,TRUE,,TRUE,start,,,TRUE,TRUE
+Timeframe,Timeframe,text,TRUE,,TRUE,start,,,TRUE,TRUE
+Definition,Definition,textarea,TRUE,,TRUE,start,,,TRUE,TRUE
+Notes,Notes,textarea,TRUE,,TRUE,start,,,TRUE,FALSE
+"Goal Met - Type yes or no: if no, explain why",Goal Met?,textarea,TRUE,,TRUE,start,,,TRUE,FALSE
+Reporter,Reporter,text,TRUE,,TRUE,start,,,TRUE,TRUE
+Metric Reporter Office,Metric Reporter Office,text,TRUE,,TRUE,start,,,TRUE,TRUE
+Collection Cycle,Collection Cycle,text,TRUE,,TRUE,start,,,TRUE,TRUE
+Due Date,Due Date,date,TRUE,,TRUE,start,,,TRUE,TRUE

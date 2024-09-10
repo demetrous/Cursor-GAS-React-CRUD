@@ -1,0 +1,292 @@
+// This is the main code file for the web app
+// This file contains the code for the server side functions
+function doGet() {
+  return HtmlService.createTemplateFromFile("index.html")
+    .evaluate()
+    .setTitle("Google Apps Script - Web App Template")
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+// This function is used to save the Schema and app settings to the script properties by reading from the App Settings sheet and Schema sheet
+const saveAppPrefs = () => {
+  const obj = {};
+  const settingsSheet =
+    SpreadsheetApp.getActiveSpreadsheet().getSheetByName("App Settings");
+  const appSettings = settingsSheet
+    .getRange(1, 1, settingsSheet.getLastRow(), settingsSheet.getLastColumn())
+    .getValues();
+  const appSettingsHeaders = appSettings.shift();
+  const appSettingsJsonArray = appSettings.map((row) => {
+    return row.reduce((obj, value, index) => {
+      obj[appSettingsHeaders[index]] = value;
+      return obj;
+    }, {});
+  });
+
+  obj.appSettings = appSettingsJsonArray[0];
+
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(
+    obj.appSettings.SchemaSheet
+  );
+
+  const data = sheet
+    .getRange(1, 1, sheet.getLastRow(), sheet.getLastColumn())
+    .getValues();
+  const headers = data.shift();
+
+  const jsonArray = data.map((row) => {
+    return row.reduce((obj, value, index) => {
+      obj[headers[index]] = value;
+      if (headers[index] === "show on form" || headers[index] === "read only on form" || headers[index] === "show in table") {
+        obj[headers[index]] =
+          value === "TRUE" || value === "True" || value === true;
+      }
+      return obj;
+    }, {});
+  });
+
+  obj.schema = jsonArray;
+
+  // save to script properties
+  PropertiesService.getScriptProperties().setProperty(
+    "appPrefs",
+    JSON.stringify(obj)
+  );
+  Logger.log(obj);
+  console.log(jsonArray)
+  return jsonArray;
+};
+
+// This function is used to get the appPrefs from the script properties
+function getAppPrefs() {
+  const appPrefs =
+    PropertiesService.getScriptProperties().getProperty("appPrefs");
+  Logger.log(appPrefs);
+
+  let appPrefsJson = JSON.parse(appPrefs);
+  appPrefsJson.activeUser = getActiveUserName();
+  return appPrefsJson;
+}
+
+// This function is used to populate the dropdown list of sheets in the App Settings sheet
+function getAllSheets() {
+  const sheets = SpreadsheetApp.getActiveSpreadsheet().getSheets();
+  const sheetNames = sheets.map((sheet) => sheet.getName());
+
+  const rule = SpreadsheetApp.newDataValidation()
+    .requireValueInList(sheetNames)
+    .build();
+  const sheet =
+    SpreadsheetApp.getActiveSpreadsheet().getSheetByName("App Settings");
+  sheet.getRange("D2:E2").setDataValidation(rule);
+}
+
+// ----------------- ORM Class -------------------
+class ORM {
+  constructor() {
+    this.sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(
+      getAppPrefs().appSettings.DataEntrySheet
+    );
+    this.ID_COL = getAppPrefs().appSettings.IdColumn;
+  }
+
+  // Create a new record
+  create(data) {
+    const id = this.getNextId() || 1;
+    data[this.ID_COL] = id;
+    //Get 2 dimensional Array Data from dataset
+    const headers = this.sheet
+      .getRange(1, 1, 1, this.sheet.getLastColumn())
+      .getValues()[0];
+
+    const newRow = [];
+
+    for (const header of headers) {
+      newRow.push(data[header] || "");
+    }
+    this.sheet.appendRow(newRow);
+  }
+
+  // Read all records
+  readAll() {
+    let filteredName = getActiveUserName();
+
+    const dataRange = this.sheet.getDataRange();
+
+    const values = dataRange
+      .getValues() // filtering by user name
+      .filter(function (item) {
+        return item[13] == filteredName || item[0] == "#";
+      });
+
+    //const values = dataRange.getValues()
+
+    Logger.log(values);
+    const headers = values[0];
+    const records = [];
+    //Returning data from multi-dimensional array
+    for (let i = 1; i < values.length; i++) {
+      const record = {};
+      for (let j = 0; j < headers.length; j++) {
+        record[headers[j]] = values[i][j];
+      }
+      records.push(record);
+    }
+
+    return records.reverse();
+  }
+
+  // Read a specific record by ID
+  readById(id) {
+    const dataRange = this.sheet.getDataRange();
+    const values = dataRange.getValues();
+    const headers = values[0];
+    for (let i = 1; i < values.length; i++) {
+      if (values[i][0] === id) {
+        const record = {};
+        for (let j = 0; j < headers.length; j++) {
+          record[headers[j]] = values[i][j];
+        }
+        return record;
+      }
+    }
+    return null;
+  }
+
+  // Update a record by ID
+  updateById(data) {
+    const dataRange = this.sheet.getDataRange();
+    const values = dataRange.getValues();
+    const headers = values[0];
+
+    for (let i = 1; i < values.length; i++) {
+      if (values[i][0] == data[this.ID_COL]) {
+        for (const key in data) {
+          const columnIndex = headers.indexOf(key);
+          if (columnIndex !== -1) {
+            values[i][columnIndex] = data[key];
+          }
+        }
+        dataRange.setValues(values);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // Delete a record by ID
+  deleteById(record) {
+    const id = record[this.ID_COL];
+    const dataRange = this.sheet.getDataRange();
+    const values = dataRange.getValues();
+    for (let i = 1; i < values.length; i++) {
+      if (values[i][0] == id) {
+        this.sheet.deleteRow(i + 1);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // Get the next ID
+  getNextId() {
+    const dataRange = this.sheet.getDataRange();
+    const values = dataRange.getValues();
+    let maxId = 0;
+    for (let i = 1; i < values.length; i++) {
+      const id = values[i][0];
+      if (id > maxId) {
+        maxId = id;
+      }
+    }
+    return maxId + 1;
+  }
+}
+
+// ----------Callables Methods ------------
+
+// Create a new record
+function createRecord(data) {
+  const orm = new ORM();
+  orm.create(data);
+}
+
+// Read all records
+function readAllRecords() {
+  const orm = new ORM();
+  const allRecords = orm.readAll();
+  return JSON.stringify(allRecords);
+}
+
+// Read a specific record by ID
+function readRecordById(recordId) {
+  const orm = new ORM();
+  const specificRecord = orm.readById(recordId);
+}
+
+// Update a record by ID
+function updateRecordById(data) {
+  const orm = new ORM();
+  const isUpdated = orm.updateById(data);
+}
+
+// Delete a record by ID
+function deleteRecord(record) {
+  const orm = new ORM();
+  const isDeleted = orm.deleteById(record);
+}
+
+function getActiveUserName() {
+  const activeUserEmail = Session.getActiveUser().getEmail();
+
+  const options = {
+    query: activeUserEmail,
+    readMask: "names",
+    sources: [
+      "DIRECTORY_SOURCE_TYPE_DOMAIN_CONTACT",
+      "DIRECTORY_SOURCE_TYPE_DOMAIN_PROFILE",
+    ],
+  };
+
+  const person = People.People.searchDirectoryPeople(options);
+
+  return person.people[0].names[0].displayName;
+}
+
+function getConnections() {
+  try {
+    // Get the list of connections/contacts of user's profile
+    const people1 = People.People.Connections.list("people/me", {
+      personFields: "names,emailAddresses",
+    });
+
+    const people = People.People.listDirectoryPeople({
+      readMask: "names,emailAddresses",
+      sources: [
+        "DIRECTORY_SOURCE_TYPE_DOMAIN_CONTACT",
+        "DIRECTORY_SOURCE_TYPE_DOMAIN_PROFILE",
+      ],
+    });
+
+    const options = {
+      query: "dmitrii.karaulanov@unlv.edu",
+      readMask: "names",
+      sources: [
+        "DIRECTORY_SOURCE_TYPE_DOMAIN_CONTACT",
+        "DIRECTORY_SOURCE_TYPE_DOMAIN_PROFILE",
+      ],
+    };
+
+    const person = People.People.searchDirectoryPeople(options);
+
+    const ans = JSON.stringify(person, null, 2);
+
+    console.log(person.people[0].names[0].displayName);
+
+    // Print the connections/contacts
+    //console.log('Connections: %s', JSON.stringify(people, null, 2));
+  } catch (err) {
+    // TODO (developers) - Handle exception here
+    console.log("Failed to get the connection with an error %s", err.message);
+  }
+}
